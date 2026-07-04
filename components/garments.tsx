@@ -1,19 +1,7 @@
-export type GarmentType = "shirt" | "sweater" | "hoodie";
-export type Side = "front" | "back";
+import type { GarmentType, Side } from "@/lib/types";
 
 export const VIEW_W = 1000;
 export const VIEW_H = 1080;
-
-export const GARMENT_LABELS: Record<GarmentType, string> = {
-  shirt: "Camisa",
-  sweater: "Suéter",
-  hoodie: "Sudadera",
-};
-
-export const SIDE_LABELS: Record<Side, string> = {
-  front: "Frente",
-  back: "Atrás",
-};
 
 export const PRINT_AREAS: Record<
   GarmentType,
@@ -30,6 +18,10 @@ export const PRINT_AREAS: Record<
   hoodie: {
     front: { x: 330, y: 300, w: 340, h: 400 },
     back: { x: 315, y: 360, w: 370, h: 480 },
+  },
+  cap: {
+    front: { x: 380, y: 430, w: 240, h: 170 },
+    back: { x: 400, y: 440, w: 200, h: 130 },
   },
 };
 
@@ -72,19 +64,32 @@ const HEM_RIBS = Array.from(
   (_, i) => `M ${260 + i * 30} 948 L ${260 + i * 30} 1000`,
 ).join(" ");
 
-export function isDarkColor(hex: string) {
+const CAP_CROWN =
+  "M 500 270 Q 745 280 775 620 L 225 620 Q 255 280 500 270 Z";
+const CAP_BRIM =
+  "M 225 620 Q 500 700 775 620 Q 790 690 740 720 Q 500 796 260 720 Q 210 690 225 620 Z";
+const CAP_SEAMS =
+  "M 500 272 L 500 618 M 500 274 Q 372 320 330 618 M 500 274 Q 628 320 670 618";
+const CAP_BACK_SEAMS =
+  "M 500 272 L 500 470 M 500 274 Q 372 320 330 618 M 500 274 Q 628 320 670 618";
+const CAP_STRAP = "M 430 620 L 570 620 L 562 688 Q 500 700 438 688 Z";
+const CAP_STRAP_HOLE =
+  "M 462 636 L 538 636 Q 544 652 538 664 L 462 664 Q 456 652 462 636 Z";
+
+export const isDarkColor = (hex: string) => {
   const n = parseInt(hex.slice(1), 16);
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
   const b = n & 255;
   return 0.299 * r + 0.587 * g + 0.114 * b < 140;
-}
+};
 
-export function clipPathsFor(garment: GarmentType, side: Side): string[] {
+export const clipPathsFor = (garment: GarmentType, side: Side): string[] => {
   if (garment === "shirt") return [side === "front" ? SHIRT_FRONT : SHIRT_BACK];
+  if (garment === "cap") return [CAP_CROWN, CAP_BRIM];
   const body = side === "front" ? SW_BODY_FRONT : SW_BODY_BACK;
   return [body, SW_HEM, SW_SLEEVE_L, SW_SLEEVE_R, SW_CUFF_L, SW_CUFF_R];
-}
+};
 
 type GarmentProps = {
   garment: GarmentType;
@@ -93,7 +98,7 @@ type GarmentProps = {
   dark: boolean;
 };
 
-export function GarmentBase({ garment, side, color, dark }: GarmentProps) {
+export const GarmentBase = ({ garment, side, color, dark }: GarmentProps) => {
   const outline = dark ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.32)";
   const seam = dark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.18)";
   const fillProps = { fill: color, stroke: outline, strokeWidth: 4 };
@@ -110,6 +115,20 @@ export function GarmentBase({ garment, side, color, dark }: GarmentProps) {
         />
         <path
           d="M 265 890 Q 500 914 735 890"
+          stroke={seam}
+          strokeWidth={3}
+          fill="none"
+        />
+      </g>
+    );
+  }
+
+  if (garment === "cap") {
+    return (
+      <g>
+        <path d={CAP_CROWN} {...fillProps} />
+        <path
+          d={side === "front" ? CAP_SEAMS : CAP_BACK_SEAMS}
           stroke={seam}
           strokeWidth={3}
           fill="none"
@@ -137,9 +156,9 @@ export function GarmentBase({ garment, side, color, dark }: GarmentProps) {
       )}
     </g>
   );
-}
+};
 
-export function GarmentOverlay({ garment, side, color, dark }: GarmentProps) {
+export const GarmentOverlay = ({ garment, side, color, dark }: GarmentProps) => {
   const outline = dark ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.32)";
   const rib = dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.16)";
   const strings = dark ? "rgba(255,255,255,0.70)" : "rgba(0,0,0,0.38)";
@@ -163,6 +182,28 @@ export function GarmentOverlay({ garment, side, color, dark }: GarmentProps) {
         stroke={outline}
         strokeWidth={3}
       />
+    );
+  }
+
+  if (garment === "cap") {
+    return (
+      <g>
+        <path d={CAP_BRIM} fill={color} stroke={outline} strokeWidth={4} />
+        <path
+          d="M 225 620 Q 500 700 775 620"
+          stroke={rib}
+          strokeWidth={3}
+          fill="none"
+        />
+        {side === "front" ? (
+          <circle cx={500} cy={282} r={12} fill={color} stroke={outline} strokeWidth={3} />
+        ) : (
+          <g>
+            <path d={CAP_STRAP} fill={color} stroke={outline} strokeWidth={3} />
+            <path d={CAP_STRAP_HOLE} fill={dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.18)"} />
+          </g>
+        )}
+      </g>
     );
   }
 
@@ -194,4 +235,4 @@ export function GarmentOverlay({ garment, side, color, dark }: GarmentProps) {
       />
     </g>
   );
-}
+};

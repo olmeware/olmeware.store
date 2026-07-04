@@ -12,17 +12,10 @@ export const metadata: Metadata = {
   description: "Tech Clothing & More",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html
-      lang="en"
-      className={`${roboto.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
-    </html>
-  );
-}
+const RootLayout = ({ children }: Readonly<{ children: React.ReactNode }>) => (
+  <html lang="en" className={`${roboto.variable} h-full antialiased`}>
+    <body className="min-h-full flex flex-col">{children}</body>
+  </html>
+);
+
+export default RootLayout;

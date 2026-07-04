@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import MockupEditor from "./mockup-editor";
 
 export const metadata: Metadata = {
-  title: "Editor de mockups — OLMEWARE",
-  description: "Crea mockups de prendas con logos de tecnologías",
+  title: "Mockup editor — OLMEWARE Admin",
+  description: "Compose garment mockups with tech logos",
 };
 
-export default function AdminCreatePage() {
-  return <MockupEditor />;
-}
+const AdminCreatePage = () => <MockupEditor />;
+
+export default AdminCreatePage;

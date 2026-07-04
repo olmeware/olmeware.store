@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  GARMENT_LABELS,
   GarmentBase,
   GarmentOverlay,
-  type GarmentType,
   PRINT_AREAS,
-  SIDE_LABELS,
-  type Side,
   VIEW_H,
   VIEW_W,
   clipPathsFor,
   isDarkColor,
-} from "./garments";
+} from "@/components/garments";
+import {
+  GARMENT_COLORS,
+  GARMENT_LABELS,
+  SIDE_LABELS,
+} from "@/lib/constants";
+import { saveDesignDraft } from "@/lib/store";
+import type { GarmentType, Side } from "@/lib/types";
 
 type Design = {
   id: string;
@@ -33,25 +37,11 @@ type DragState = {
   dy: number;
 };
 
-const COLORS = [
-  "#f5f5f5",
-  "#d4d4d4",
-  "#8a8a8a",
-  "#1a1a1a",
-  "#1e2a44",
-  "#3b6ea5",
-  "#c0392b",
-  "#2e7d4f",
-  "#d9c7a7",
-  "#5b3e8f",
-  "#e6b93c",
-  "#e39cc0",
-];
-
 const clamp = (v: number, min: number, max: number) =>
   Math.min(max, Math.max(min, v));
 
-export default function MockupEditor() {
+const MockupEditor = () => {
+  const router = useRouter();
   const [garment, setGarment] = useState<GarmentType>("shirt");
   const [color, setColor] = useState("#1a1a1a");
   const [side, setSide] = useState<Side>("front");
@@ -181,14 +171,19 @@ export default function MockupEditor() {
     });
   };
 
-  const downloadPng = async () => {
+  const exportSvg = () => {
     const svg = svgRef.current;
-    if (!svg) return;
+    if (!svg) return null;
     const clone = svg.cloneNode(true) as SVGSVGElement;
     clone.querySelectorAll("[data-export-ignore]").forEach((n) => n.remove());
     clone.setAttribute("width", String(VIEW_W * 2));
     clone.setAttribute("height", String(VIEW_H * 2));
-    const xml = new XMLSerializer().serializeToString(clone);
+    return new XMLSerializer().serializeToString(clone);
+  };
+
+  const downloadPng = async () => {
+    const xml = exportSvg();
+    if (!xml) return;
     const url = URL.createObjectURL(
       new Blob([xml], { type: "image/svg+xml" }),
     );
@@ -213,32 +208,49 @@ export default function MockupEditor() {
     }, "image/png");
   };
 
+  const sendToProduct = () => {
+    const xml = exportSvg();
+    if (!xml) return;
+    const dataUri =
+      "data:image/svg+xml;base64," +
+      window.btoa(unescape(encodeURIComponent(xml)));
+    saveDesignDraft({ garment, color, images: [dataUri] });
+    router.push("/admin/products/new?from=editor");
+  };
+
   return (
     <div className="min-h-screen bg-neutral-100 text-neutral-900">
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-white px-6 py-4">
         <div>
-          <h1 className="text-lg font-bold tracking-tight">
-            OLMEWARE · Editor de mockups
-          </h1>
+          <h1 className="text-lg font-bold tracking-tight">Mockup editor</h1>
           <p className="text-sm text-neutral-500">
-            Arrastra un logo sobre la prenda, acomódalo y descarga el PNG.
+            Drop a logo on the garment, arrange it, then export or turn it into
+            a product.
           </p>
         </div>
-        <button
-          onClick={downloadPng}
-          className="rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-700"
-        >
-          Descargar PNG
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={downloadPng}
+            className="rounded-lg border border-neutral-300 px-5 py-2.5 text-sm font-semibold hover:border-neutral-500"
+          >
+            Download PNG
+          </button>
+          <button
+            onClick={sendToProduct}
+            className="rounded-lg bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-700"
+          >
+            Send to product →
+          </button>
+        </div>
       </header>
 
       <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6 lg:flex-row">
         <aside className="flex w-full shrink-0 flex-col gap-6 lg:w-72">
           <section className="rounded-xl bg-white p-4 shadow-sm">
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Prenda
+              Garment
             </h2>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {(Object.keys(GARMENT_LABELS) as GarmentType[]).map((g) => (
                 <button
                   key={g}
@@ -278,7 +290,7 @@ export default function MockupEditor() {
               Color
             </h2>
             <div className="grid grid-cols-6 gap-2">
-              {COLORS.map((c) => (
+              {GARMENT_COLORS.map((c) => (
                 <button
                   key={c}
                   onClick={() => setColor(c)}
@@ -297,16 +309,16 @@ export default function MockupEditor() {
                 onChange={(e) => setColor(e.target.value)}
                 className="h-8 w-12 cursor-pointer rounded border border-neutral-200"
               />
-              Color personalizado
+              Custom color
             </label>
           </section>
 
           <section className="rounded-xl bg-white p-4 shadow-sm">
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Diseños ({SIDE_LABELS[side].toLowerCase()})
+              Designs ({SIDE_LABELS[side].toLowerCase()})
             </h2>
             <label className="block cursor-pointer rounded-lg border-2 border-dashed border-neutral-300 px-3 py-4 text-center text-sm text-neutral-500 hover:border-neutral-400">
-              Subir imágenes
+              Upload images
               <input
                 type="file"
                 accept="image/*"
@@ -343,7 +355,7 @@ export default function MockupEditor() {
                       e.stopPropagation();
                       moveLayer(d.id, 1);
                     }}
-                    title="Traer al frente"
+                    title="Bring forward"
                     className="rounded px-1 text-neutral-400 hover:text-neutral-900"
                   >
                     ↑
@@ -353,7 +365,7 @@ export default function MockupEditor() {
                       e.stopPropagation();
                       moveLayer(d.id, -1);
                     }}
-                    title="Enviar atrás"
+                    title="Send backward"
                     className="rounded px-1 text-neutral-400 hover:text-neutral-900"
                   >
                     ↓
@@ -364,7 +376,7 @@ export default function MockupEditor() {
                       setDesigns((ds) => ds.filter((x) => x.id !== d.id));
                       if (selectedId === d.id) setSelectedId(null);
                     }}
-                    title="Eliminar"
+                    title="Delete"
                     className="rounded px-1 text-neutral-400 hover:text-red-600"
                   >
                     ✕
@@ -373,7 +385,7 @@ export default function MockupEditor() {
               ))}
               {sideDesigns.length === 0 && (
                 <li className="text-xs text-neutral-400">
-                  Sin diseños en este lado.
+                  No designs on this side.
                 </li>
               )}
             </ul>
@@ -382,10 +394,10 @@ export default function MockupEditor() {
           {selected && (
             <section className="rounded-xl bg-white p-4 shadow-sm">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Diseño seleccionado
+                Selected design
               </h2>
               <label className="block text-sm text-neutral-600">
-                Tamaño
+                Size
                 <input
                   type="range"
                   min={40}
@@ -403,7 +415,7 @@ export default function MockupEditor() {
                 }
                 className="mt-3 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm hover:border-neutral-400"
               >
-                Mover a {selected.side === "front" ? "atrás" : "frente"}
+                Move to {selected.side === "front" ? "back" : "front"}
               </button>
             </section>
           )}
@@ -414,7 +426,7 @@ export default function MockupEditor() {
               checked={showGuide}
               onChange={(e) => setShowGuide(e.target.checked)}
             />
-            Mostrar área de impresión
+            Show print area
           </label>
         </aside>
 
@@ -517,8 +529,7 @@ export default function MockupEditor() {
           {sideDesigns.length === 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <p className="rounded-lg bg-neutral-900/70 px-4 py-2 text-sm text-white">
-                Arrastra aquí la imagen de un lenguaje (PNG/SVG) o usa «Subir
-                imágenes»
+                Drag a logo image here (PNG/SVG) or use “Upload images”
               </p>
             </div>
           )}
@@ -526,4 +537,6 @@ export default function MockupEditor() {
       </div>
     </div>
   );
-}
+};
+
+export default MockupEditor;

@@ -19,10 +19,12 @@ Future product lines may include intimate clothing and other apparel, but the cu
 ```
 app/
   layout.tsx      — root layout
-  page.tsx        — home page
   globals.css     — global styles
-  admin/create/   — mockup editor: place logos on SVG garments, export PNG
-public/           — static assets
+  (store)/        — storefront: home, shop (filtered catalog), product/[id], cart, login, register
+  admin/          — admin panel: dashboard, products, collections, mockup editor (see app/admin/README.md)
+components/       — shared UI: garment SVGs, product visual/card, header, footer
+lib/              — localStorage data layer: types, constants, seed, store, hooks (see lib/README.md)
+public/logos/     — devicon SVG logos used on merch mockups
 devicons.md       — full catalog of tech themes for product designs
 ```
 
@@ -70,6 +72,6 @@ When adding new products or design themes, check `devicons.md` first and keep it
 
 ## Notes
 
-- This is a very early stage project (v0.1.0). The store UI is not yet built.
-- No backend, auth, or payment system is integrated yet.
+- This is a very early stage project (v0.1.0). The storefront and admin frontends are built; data lives in a `localStorage` layer (`lib/store.ts`) seeded from `lib/seed.ts` until the API exists.
+- No backend, payments, or real auth yet. Demo login: `admin@olmeware.store` / `admin123`; customers register client-side.
 - Supabase is available via MCP tools for when a database/auth layer is needed.
