@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import ProductVisual from "@/components/product-visual";
-import { GARMENT_LABELS, formatPrice } from "@/lib/constants";
+import { COLOR_LABELS, GARMENT_LABELS, formatPrice } from "@/lib/constants";
 import { useCart, useHydrated, useProducts } from "@/lib/hooks";
 import { clearCart, removeFromCart, setCartQty } from "@/lib/store";
 
@@ -75,9 +75,15 @@ const CartPage = () => {
       </h1>
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="flex flex-col gap-4 lg:col-span-2">
-          {lines.map(({ item, product }) => (
+          {lines.map(({ item, product }) => {
+            const custom = {
+              display: item.display,
+              color: item.color,
+              position: item.position,
+            };
+            return (
             <div
-              key={`${item.productId}-${item.size}`}
+              key={`${item.productId}-${item.size}-${item.display ?? "icon"}-${item.color ?? ""}-${item.position ?? "center"}`}
               className="flex gap-4 rounded-xl border border-neutral-200 bg-white p-4"
             >
               <Link
@@ -86,6 +92,9 @@ const CartPage = () => {
               >
                 <ProductVisual
                   product={product!}
+                  display={item.display}
+                  position={item.position}
+                  color={item.color}
                   className="aspect-square w-full object-contain"
                 />
               </Link>
@@ -100,10 +109,16 @@ const CartPage = () => {
                     </Link>
                     <p className="text-sm text-neutral-500">
                       {GARMENT_LABELS[product!.garment]} · Size {item.size}
+                      {item.color && ` · ${COLOR_LABELS[item.color] ?? item.color}`}
+                      {item.display === "icon-name" && " · Icon + name"}
+                      {item.position && item.position !== "center" &&
+                        ` · ${item.position === "left" ? "Left" : "Right"}`}
                     </p>
                   </div>
                   <button
-                    onClick={() => removeFromCart(item.productId, item.size)}
+                    onClick={() =>
+                      removeFromCart(item.productId, item.size, custom)
+                    }
                     className="text-sm text-neutral-400 hover:text-red-600"
                   >
                     Remove
@@ -113,7 +128,7 @@ const CartPage = () => {
                   <div className="flex items-center rounded-lg border border-neutral-300">
                     <button
                       onClick={() =>
-                        setCartQty(item.productId, item.size, item.qty - 1)
+                        setCartQty(item.productId, item.size, item.qty - 1, custom)
                       }
                       className="px-3 py-1.5 hover:bg-neutral-100"
                     >
@@ -122,7 +137,7 @@ const CartPage = () => {
                     <span className="w-8 text-center text-sm">{item.qty}</span>
                     <button
                       onClick={() =>
-                        setCartQty(item.productId, item.size, item.qty + 1)
+                        setCartQty(item.productId, item.size, item.qty + 1, custom)
                       }
                       className="px-3 py-1.5 hover:bg-neutral-100"
                     >
@@ -135,7 +150,8 @@ const CartPage = () => {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <aside className="h-fit rounded-xl border border-neutral-200 bg-white p-6">

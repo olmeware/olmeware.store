@@ -2,6 +2,7 @@ import { SEED_COLLECTIONS, SEED_PRODUCTS, SEED_USERS } from "./seed";
 import type {
   CartItem,
   Collection,
+  Customization,
   DesignDraft,
   Product,
   Session,
@@ -160,27 +161,51 @@ export const getSession = (): Session | null => read(KEYS.session, null);
 
 export const getCart = (): CartItem[] => read(KEYS.cart, []);
 
-export const addToCart = (productId: string, size: Size, qty: number) => {
+const sameLine = (
+  item: CartItem,
+  productId: string,
+  size: Size,
+  custom: Customization,
+) =>
+  item.productId === productId &&
+  item.size === size &&
+  (item.display ?? "icon") === (custom.display ?? "icon") &&
+  (item.color ?? "") === (custom.color ?? "") &&
+  (item.position ?? "center") === (custom.position ?? "center");
+
+export const addToCart = (
+  productId: string,
+  size: Size,
+  qty: number,
+  custom: Customization = {},
+) => {
   const cart = getCart();
-  const item = cart.find((i) => i.productId === productId && i.size === size);
+  const item = cart.find((i) => sameLine(i, productId, size, custom));
   if (item) item.qty += qty;
-  else cart.push({ productId, size, qty });
+  else cart.push({ productId, size, qty, ...custom });
   write(KEYS.cart, cart);
 };
 
-export const setCartQty = (productId: string, size: Size, qty: number) => {
+export const setCartQty = (
+  productId: string,
+  size: Size,
+  qty: number,
+  custom: Customization = {},
+) => {
   const cart = getCart()
-    .map((i) =>
-      i.productId === productId && i.size === size ? { ...i, qty } : i,
-    )
+    .map((i) => (sameLine(i, productId, size, custom) ? { ...i, qty } : i))
     .filter((i) => i.qty > 0);
   write(KEYS.cart, cart);
 };
 
-export const removeFromCart = (productId: string, size: Size) => {
+export const removeFromCart = (
+  productId: string,
+  size: Size,
+  custom: Customization = {},
+) => {
   write(
     KEYS.cart,
-    getCart().filter((i) => !(i.productId === productId && i.size === size)),
+    getCart().filter((i) => !sameLine(i, productId, size, custom)),
   );
 };
 

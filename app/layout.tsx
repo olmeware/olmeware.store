@@ -21,7 +21,7 @@ const RootLayout = ({ children }: Readonly<{ children: React.ReactNode }>) => (
   <html
     lang="en"
     suppressHydrationWarning
-    className={`${roboto.variable} h-full antialiased`}
+    className={`${roboto.className} ${roboto.variable} h-full antialiased`}
   >
     <head>
       <script dangerouslySetInnerHTML={{ __html: themeInit }} />

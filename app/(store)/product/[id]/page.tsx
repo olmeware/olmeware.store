@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import ProductCard from "@/components/product-card";
 import ProductVisual from "@/components/product-visual";
 import {
+  COLOR_LABELS,
+  GARMENT_COLORS,
   GARMENT_LABELS,
   SIDE_LABELS,
   STACK_LABELS,
@@ -13,7 +15,41 @@ import {
 } from "@/lib/constants";
 import { useHydrated, useProducts } from "@/lib/hooks";
 import { addToCart } from "@/lib/store";
-import type { Side, Size } from "@/lib/types";
+import type { IconDisplay, IconPosition, Side, Size } from "@/lib/types";
+
+const DISPLAY_OPTIONS: { value: IconDisplay; label: string }[] = [
+  { value: "icon", label: "Icon only" },
+  { value: "icon-name", label: "Icon + name" },
+];
+
+const POSITION_OPTIONS: { value: IconPosition; label: string }[] = [
+  { value: "left", label: "Left" },
+  { value: "center", label: "Center" },
+  { value: "right", label: "Right" },
+];
+
+const OptionButton = ({
+  active,
+  onClick,
+  className = "",
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  className?: string;
+  children: React.ReactNode;
+}) => (
+  <button
+    onClick={onClick}
+    className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+      active
+        ? "border-neutral-900 bg-neutral-900 text-white"
+        : "border-neutral-300 hover:border-neutral-500"
+    } ${className}`}
+  >
+    {children}
+  </button>
+);
 
 type View = { kind: "svg"; side: Side } | { kind: "image"; src: string };
 
@@ -37,6 +73,9 @@ const ProductPage = () => {
   const [viewIndex, setViewIndex] = useState(0);
   const [size, setSize] = useState<Size | null>(null);
   const [qty, setQty] = useState(1);
+  const [display, setDisplay] = useState<IconDisplay>("icon");
+  const [position, setPosition] = useState<IconPosition>("center");
+  const [pickedColor, setPickedColor] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
 
   if (!hydrated) return <div className="min-h-[60vh]" />;
@@ -59,9 +98,20 @@ const ProductPage = () => {
     .slice(0, 4);
   const view = views[Math.min(viewIndex, views.length - 1)];
 
+  const customizable = product.images.length === 0 && Boolean(product.logo);
+  const color =
+    pickedColor ??
+    (GARMENT_COLORS.includes(product.color) ? product.color : GARMENT_COLORS[0]);
+  const isCap = product.garment === "cap";
+
   const handleAdd = () => {
     if (!size) return;
-    addToCart(product.id, size, qty);
+    addToCart(
+      product.id,
+      size,
+      qty,
+      customizable ? { display, color, position } : {},
+    );
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   };
@@ -83,6 +133,9 @@ const ProductPage = () => {
               <ProductVisual
                 product={product}
                 side={view.side}
+                display={display}
+                position={position}
+                color={color}
                 className="aspect-square w-full object-contain"
               />
             ) : (
@@ -108,6 +161,9 @@ const ProductPage = () => {
                   <ProductVisual
                     product={product}
                     side={v.side}
+                    display={display}
+                    position={position}
+                    color={color}
                     className="aspect-square w-full"
                   />
                 ) : (
@@ -151,20 +207,76 @@ const ProductPage = () => {
             <p className="mb-2 text-sm font-semibold">Size</p>
             <div className="flex flex-wrap gap-2">
               {product.sizes.map((s) => (
-                <button
+                <OptionButton
                   key={s}
+                  active={size === s}
                   onClick={() => setSize(s)}
-                  className={`min-w-12 rounded-lg border px-3 py-2 text-sm font-medium ${
-                    size === s
-                      ? "border-neutral-900 bg-neutral-900 text-white"
-                      : "border-neutral-300 hover:border-neutral-500"
-                  }`}
+                  className="min-w-12"
                 >
                   {s}
-                </button>
+                </OptionButton>
               ))}
             </div>
           </div>
+
+          {customizable && (
+            <>
+              <div>
+                <p className="mb-2 text-sm font-semibold">Color</p>
+                <div className="flex flex-wrap gap-2">
+                  {GARMENT_COLORS.map((c) => (
+                    <OptionButton
+                      key={c}
+                      active={color === c}
+                      onClick={() => setPickedColor(c)}
+                      className="flex items-center gap-2"
+                    >
+                      <span
+                        className="h-4 w-4 rounded-full border border-neutral-400"
+                        style={{ backgroundColor: c }}
+                      />
+                      {COLOR_LABELS[c]}
+                    </OptionButton>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-semibold">Icon display</p>
+                <div className="flex flex-wrap gap-2">
+                  {DISPLAY_OPTIONS.map((opt) => (
+                    <OptionButton
+                      key={opt.value}
+                      active={display === opt.value}
+                      onClick={() => setDisplay(opt.value)}
+                    >
+                      {opt.label}
+                    </OptionButton>
+                  ))}
+                </div>
+              </div>
+
+              {!isCap && (
+                <div>
+                  <p className="mb-2 text-sm font-semibold">Icon position</p>
+                  <div className="flex flex-wrap gap-2">
+                    {POSITION_OPTIONS.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        active={position === opt.value}
+                        onClick={() => setPosition(opt.value)}
+                      >
+                        {opt.label}
+                      </OptionButton>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-neutral-500">
+                    Printed on the front, just below the neckline.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
 
           <div>
             <p className="mb-2 text-sm font-semibold">Quantity</p>

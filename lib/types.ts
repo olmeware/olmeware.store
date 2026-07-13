@@ -42,7 +42,17 @@ export type Collection = {
   createdAt: string;
 };
 
-export type CartItem = {
+export type IconDisplay = "icon" | "icon-name";
+
+export type IconPosition = "left" | "center" | "right";
+
+export type Customization = {
+  display?: IconDisplay;
+  color?: string;
+  position?: IconPosition;
+};
+
+export type CartItem = Customization & {
   productId: string;
   size: Size;
   qty: number;

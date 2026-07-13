@@ -48,6 +48,11 @@ pnpm lint     # ESLint
 
 All tech themes for merch designs live in `devicons.md`. When adding products or design themes, check it first and keep it updated.
 
+## Product customization (storefront)
+
+- Garments come in black or white only (`GARMENT_COLORS`); designs print on the front only.
+- On mockup products the customer picks color, icon display (icon / icon + name), and icon position (left/center/right — wearer-relative, chest height per the reference images in `public/clothing/`). Choices persist on cart lines (`Customization` in `lib/types.ts`) and render via `components/product-visual.tsx`.
+
 ## Conventions
 
 - App Router only; co-locate components close to where they're used.
