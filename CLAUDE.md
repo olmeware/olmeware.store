@@ -35,7 +35,8 @@ pnpm lint     # ESLint
 
 - Theme is a `data-theme="light" | "dark"` attribute on `<html>`, set before paint by an inline script in `app/layout.tsx` (reads localStorage `theme`, falls back to OS preference). `components/theme-toggle.tsx` switches and persists it; it's mounted in the storefront header and admin sidebar.
 - `app/globals.css` defines a `@custom-variant dark` and remaps Tailwind's `--color-*` variables under `:root[data-theme="dark"]`. Since Tailwind v4 compiles color utilities to `var(--color-*)`, the whole site flips without `dark:` classes — **don't add `dark:` color classes**; if you use a color utility not yet remapped, add its dark value to globals.css instead.
-- Side effect of the inversion: surfaces that are dark in light mode (home hero, admin sidebar) become light in dark mode. Accepted design.
+- Side effect of the inversion: surfaces that are dark in light mode (home hero) become light in dark mode. Accepted design.
+- Opt-out: the `theme-lock` class (globals.css) restores the original palette within a subtree so it looks the same in both themes. The admin sidebar uses it — it stays dark always.
 - Product/garment mockup colors are literal hex values and intentionally not themed.
 
 ## Admin panel
@@ -46,6 +47,11 @@ pnpm lint     # ESLint
 ## Product catalog
 
 All tech themes for merch designs live in `devicons.md`. When adding products or design themes, check it first and keep it updated.
+
+## Product customization (storefront)
+
+- Garments come in black or white only (`GARMENT_COLORS`); designs print on the front only.
+- On mockup products the customer picks color, icon display (icon / icon + name), and icon position (left/center/right — wearer-relative, chest height per the reference images in `public/clothing/`). Choices persist on cart lines (`Customization` in `lib/types.ts`) and render via `components/product-visual.tsx`.
 
 ## Conventions
 

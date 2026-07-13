@@ -25,20 +25,12 @@ export const STACK_LABELS: Record<Stack, string> = {
 
 export const ALL_SIZES: Size[] = ["XS", "S", "M", "L", "XL", "XXL"];
 
-export const GARMENT_COLORS = [
-  "#f5f5f5",
-  "#d4d4d4",
-  "#8a8a8a",
-  "#1a1a1a",
-  "#1e2a44",
-  "#3b6ea5",
-  "#c0392b",
-  "#2e7d4f",
-  "#d9c7a7",
-  "#5b3e8f",
-  "#e6b93c",
-  "#e39cc0",
-];
+export const GARMENT_COLORS = ["#1a1a1a", "#f5f5f5"];
+
+export const COLOR_LABELS: Record<string, string> = {
+  "#1a1a1a": "Black",
+  "#f5f5f5": "White",
+};
 
 export const formatPrice = (value: number) =>
   new Intl.NumberFormat("es-MX", {

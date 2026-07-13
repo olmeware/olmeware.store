@@ -11,20 +11,15 @@ import {
   clipPathsFor,
   isDarkColor,
 } from "@/components/garments";
-import {
-  GARMENT_COLORS,
-  GARMENT_LABELS,
-  SIDE_LABELS,
-} from "@/lib/constants";
+import { GARMENT_COLORS, GARMENT_LABELS } from "@/lib/constants";
 import { saveDesignDraft } from "@/lib/store";
 import { LOGO_SLUGS } from "@/lib/logos";
-import type { GarmentType, Side } from "@/lib/types";
+import type { GarmentType } from "@/lib/types";
 
 type Design = {
   id: string;
   src: string;
   name: string;
-  side: Side;
   cx: number;
   cy: number;
   w: number;
@@ -45,7 +40,6 @@ const MockupEditor = () => {
   const router = useRouter();
   const [garment, setGarment] = useState<GarmentType>("shirt");
   const [color, setColor] = useState("#1a1a1a");
-  const [side, setSide] = useState<Side>("front");
   const [designs, setDesigns] = useState<Design[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(true);
@@ -56,9 +50,8 @@ const MockupEditor = () => {
   const dragRef = useRef<DragState | null>(null);
 
   const dark = isDarkColor(color);
-  const sideDesigns = designs.filter((d) => d.side === side);
   const selected = designs.find((d) => d.id === selectedId) ?? null;
-  const printArea = PRINT_AREAS[garment][side];
+  const printArea = PRINT_AREAS[garment].front;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -90,7 +83,7 @@ const MockupEditor = () => {
           const img = new Image();
           img.onload = () => {
             const aspect = img.naturalHeight / img.naturalWidth || 1;
-            const area = PRINT_AREAS[garment][side];
+            const area = PRINT_AREAS[garment].front;
             const id = crypto.randomUUID();
             setDesigns((ds) => [
               ...ds,
@@ -98,7 +91,6 @@ const MockupEditor = () => {
                 id,
                 src,
                 name: file.name,
-                side,
                 cx: at?.x ?? area.x + area.w / 2,
                 cy: at?.y ?? area.y + area.h / 2,
                 w: 240,
@@ -118,7 +110,7 @@ const MockupEditor = () => {
     const img = new Image();
     img.onload = () => {
       const aspect = img.naturalHeight / img.naturalWidth || 1;
-      const area = PRINT_AREAS[garment][side];
+      const area = PRINT_AREAS[garment].front;
       const id = crypto.randomUUID();
       setDesigns((ds) => [
         ...ds,
@@ -126,7 +118,6 @@ const MockupEditor = () => {
           id,
           src,
           name: slug,
-          side,
           cx: at?.x ?? area.x + area.w / 2,
           cy: at?.y ?? area.y + area.h / 2,
           w: 240,
@@ -233,7 +224,7 @@ const MockupEditor = () => {
       if (!blob) return;
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `olmeware-${garment}-${side}-${color.replace("#", "")}.png`;
+      a.download = `olmeware-${garment}-${color.replace("#", "")}.png`;
       a.click();
       URL.revokeObjectURL(a.href);
     }, "image/png");
@@ -256,7 +247,7 @@ const MockupEditor = () => {
           <h1 className="text-lg font-bold tracking-tight">Mockup editor</h1>
           <p className="text-sm text-neutral-500">
             Drop a logo on the garment, arrange it, then export or turn it into
-            a product.
+            a product. Designs are printed on the front only.
           </p>
         </div>
         <div className="flex gap-3">
@@ -296,24 +287,6 @@ const MockupEditor = () => {
                 </button>
               ))}
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {(Object.keys(SIDE_LABELS) as Side[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    setSide(s);
-                    setSelectedId(null);
-                  }}
-                  className={`rounded-lg border px-2 py-2 text-sm ${
-                    side === s
-                      ? "border-neutral-900 bg-neutral-900 text-white"
-                      : "border-neutral-200 hover:border-neutral-400"
-                  }`}
-                >
-                  {SIDE_LABELS[s]}
-                </button>
-              ))}
-            </div>
           </section>
 
           <section className="rounded-xl bg-white p-4 shadow-sm">
@@ -333,20 +306,11 @@ const MockupEditor = () => {
                 />
               ))}
             </div>
-            <label className="mt-3 flex items-center gap-2 text-sm text-neutral-600">
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="h-8 w-12 cursor-pointer rounded border border-neutral-200"
-              />
-              Custom color
-            </label>
           </section>
 
           <section className="rounded-xl bg-white p-4 shadow-sm">
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Designs ({SIDE_LABELS[side].toLowerCase()})
+              Designs
             </h2>
             <label className="block cursor-pointer rounded-lg border-2 border-dashed border-neutral-300 px-3 py-4 text-center text-sm text-neutral-500 hover:border-neutral-400">
               Upload images
@@ -395,7 +359,7 @@ const MockupEditor = () => {
             </div>
 
             <ul className="mt-3 flex flex-col gap-2">
-              {sideDesigns.map((d) => (
+              {designs.map((d) => (
                 <li
                   key={d.id}
                   onClick={() => setSelectedId(d.id)}
@@ -447,10 +411,8 @@ const MockupEditor = () => {
                   </button>
                 </li>
               ))}
-              {sideDesigns.length === 0 && (
-                <li className="text-xs text-neutral-400">
-                  No designs on this side.
-                </li>
+              {designs.length === 0 && (
+                <li className="text-xs text-neutral-400">No designs yet.</li>
               )}
             </ul>
           </section>
@@ -471,16 +433,6 @@ const MockupEditor = () => {
                   className="mt-1 w-full"
                 />
               </label>
-              <button
-                onClick={() =>
-                  updateSelected({
-                    side: selected.side === "front" ? "back" : "front",
-                  })
-                }
-                className="mt-3 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm hover:border-neutral-400"
-              >
-                Move to {selected.side === "front" ? "back" : "front"}
-              </button>
             </section>
           )}
 
@@ -524,16 +476,16 @@ const MockupEditor = () => {
           >
             <defs>
               <clipPath id="garment-clip">
-                {clipPathsFor(garment, side).map((d, i) => (
+                {clipPathsFor(garment, "front").map((d, i) => (
                   <path key={i} d={d} />
                 ))}
               </clipPath>
             </defs>
 
-            <GarmentBase garment={garment} side={side} color={color} dark={dark} />
+            <GarmentBase garment={garment} side="front" color={color} dark={dark} />
 
             <g clipPath="url(#garment-clip)">
-              {sideDesigns.map((d) => (
+              {designs.map((d) => (
                 <image
                   key={d.id}
                   href={d.src}
@@ -548,7 +500,7 @@ const MockupEditor = () => {
               ))}
             </g>
 
-            <GarmentOverlay garment={garment} side={side} color={color} dark={dark} />
+            <GarmentOverlay garment={garment} side="front" color={color} dark={dark} />
 
             {showGuide && (
               <rect
@@ -565,7 +517,7 @@ const MockupEditor = () => {
               />
             )}
 
-            {selected && selected.side === side && (
+            {selected && (
               <g data-export-ignore>
                 <rect
                   x={selected.cx - selected.w / 2}
@@ -590,7 +542,7 @@ const MockupEditor = () => {
             )}
           </svg>
 
-          {sideDesigns.length === 0 && (
+          {designs.length === 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <p className="rounded-lg bg-neutral-900/70 px-4 py-2 text-sm text-white">
                 Drag a logo image here (PNG/SVG) or use “Upload images”
