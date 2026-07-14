@@ -1,4 +1,3 @@
-// Auto-generated from public/logos. Each entry maps to /logos/<slug>.svg.
 export const LOGO_SLUGS = [
   "alpinejs",
   "amazon",
