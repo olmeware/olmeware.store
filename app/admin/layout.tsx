@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useHydrated, useSession } from "@/lib/hooks";
+import { useSession, useSessionReady } from "@/lib/hooks";
 import { logout } from "@/lib/store";
 import ThemeToggle from "@/components/theme-toggle";
 
@@ -20,7 +20,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
   const pathname = usePathname();
   const session = useSession();
-  const hydrated = useHydrated();
+  const ready = useSessionReady();
   const isAdmin = session?.role === "admin";
   const [collapsed, setCollapsed] = useState(
     () =>
@@ -35,13 +35,13 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
     });
 
   useEffect(() => {
-    if (hydrated && !isAdmin) router.replace("/login");
-  }, [hydrated, isAdmin, router]);
+    if (ready && !isAdmin) router.replace("/login");
+  }, [ready, isAdmin, router]);
 
-  if (!hydrated || !isAdmin) {
+  if (!ready || !isAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-neutral-100 text-sm text-neutral-500">
-        {hydrated ? "Redirecting to login…" : "Loading…"}
+        {ready ? "Redirecting to login…" : "Loading…"}
       </div>
     );
   }
@@ -97,7 +97,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
             </Link>
             <button
               onClick={() => {
-                logout();
+                void logout();
                 router.push("/login");
               }}
               className="text-neutral-400 hover:text-white"

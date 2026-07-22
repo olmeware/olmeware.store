@@ -55,7 +55,7 @@ const Header = () => {
               </span>
               <button
                 onClick={() => {
-                  logout();
+                  void logout();
                   router.push("/");
                 }}
                 className="text-neutral-600 hover:text-neutral-900"

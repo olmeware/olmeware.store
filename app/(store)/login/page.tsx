@@ -11,14 +11,19 @@ const LoginPage = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = login(email, password);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    setError("");
+    setSubmitting(true);
+    try {
+      const session = await login(email, password);
+      router.push(session.role === "admin" ? "/admin" : "/");
+    } catch (err) {
+      setError((err as { message?: string })?.message ?? "Login failed.");
+      setSubmitting(false);
     }
-    router.push(result.session.role === "admin" ? "/admin" : "/");
   };
 
   return (
@@ -58,9 +63,10 @@ const LoginPage = () => {
         )}
         <button
           type="submit"
-          className="rounded-lg bg-neutral-900 px-6 py-3 text-sm font-semibold text-white hover:bg-neutral-700"
+          disabled={submitting}
+          className="rounded-lg bg-neutral-900 px-6 py-3 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-60"
         >
-          Log in
+          {submitting ? "Logging in…" : "Log in"}
         </button>
       </form>
 
