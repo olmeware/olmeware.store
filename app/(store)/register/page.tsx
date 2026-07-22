@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { login, registerUser } from "@/lib/store";
+import { registerUser } from "@/lib/store";
 
 const RegisterPage = () => {
   const router = useRouter();
@@ -13,23 +13,27 @@ const RegisterPage = () => {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    setError("");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
     if (password !== confirm) {
       setError("Passwords do not match.");
       return;
     }
-    const result = registerUser(name, email, password);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    setSubmitting(true);
+    try {
+      await registerUser(name, email, password);
+      router.push("/");
+    } catch (err) {
+      setError((err as { message?: string })?.message ?? "Registration failed.");
+      setSubmitting(false);
     }
-    login(email, password);
-    router.push("/");
   };
 
   return (
@@ -69,7 +73,7 @@ const RegisterPage = () => {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="At least 6 characters"
+            placeholder="At least 8 characters"
             className="rounded-lg border border-neutral-300 bg-white px-3 py-2.5 font-normal outline-none focus:border-neutral-500"
           />
         </label>
@@ -91,9 +95,10 @@ const RegisterPage = () => {
         )}
         <button
           type="submit"
-          className="rounded-lg bg-neutral-900 px-6 py-3 text-sm font-semibold text-white hover:bg-neutral-700"
+          disabled={submitting}
+          className="rounded-lg bg-neutral-900 px-6 py-3 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-60"
         >
-          Create account
+          {submitting ? "Creating…" : "Create account"}
         </button>
       </form>
 

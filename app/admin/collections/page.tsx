@@ -19,7 +19,7 @@ const AdminCollectionsPage = () => {
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
@@ -30,13 +30,18 @@ const AdminCollectionsPage = () => {
       setError("A collection with this name already exists.");
       return;
     }
-    saveCollection({
-      id: crypto.randomUUID(),
-      name: trimmed,
-      slug: slugify(trimmed),
-      description: description.trim(),
-      createdAt: new Date().toISOString(),
-    });
+    try {
+      await saveCollection({
+        id: crypto.randomUUID(),
+        name: trimmed,
+        slug: slugify(trimmed),
+        description: description.trim(),
+        createdAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      setError((err as { message?: string })?.message ?? "Could not save the collection.");
+      return;
+    }
     setName("");
     setDescription("");
     setError("");
@@ -121,7 +126,7 @@ const AdminCollectionsPage = () => {
                           `Delete "${c.name}"? Products in it are kept but ungrouped.`,
                         )
                       )
-                        deleteCollection(c.id);
+                        void deleteCollection(c.id);
                     }}
                     className="font-medium text-neutral-400 hover:text-red-600"
                   >

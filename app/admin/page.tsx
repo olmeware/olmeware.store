@@ -7,7 +7,7 @@ import {
   STACK_LABELS,
   formatPrice,
 } from "@/lib/constants";
-import { useCollections, useProducts } from "@/lib/hooks";
+import { useAdminProducts, useCollections } from "@/lib/hooks";
 import type { GarmentType } from "@/lib/types";
 
 const StatCard = ({
@@ -29,7 +29,7 @@ const StatCard = ({
 );
 
 const AdminDashboard = () => {
-  const products = useProducts();
+  const products = useAdminProducts();
   const collections = useCollections();
 
   const active = products.filter((p) => p.status === "active");

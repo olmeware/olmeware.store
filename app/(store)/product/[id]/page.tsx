@@ -78,7 +78,8 @@ const ProductPage = () => {
   const [pickedColor, setPickedColor] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
 
-  if (!hydrated) return <div className="min-h-[60vh]" />;
+  // Empty list means the catalog is still loading (there are always products).
+  if (!hydrated || products.length === 0) return <div className="min-h-[60vh]" />;
 
   if (!product) {
     return (

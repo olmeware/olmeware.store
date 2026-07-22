@@ -9,13 +9,8 @@ import {
   GARMENT_LABELS,
   STACK_LABELS,
 } from "@/lib/constants";
-import { useCollections, useHydrated } from "@/lib/hooks";
-import {
-  clearDesignDraft,
-  getDesignDraft,
-  getProduct,
-  saveProduct,
-} from "@/lib/store";
+import { useAdminProducts, useCollections, useHydrated } from "@/lib/hooks";
+import { clearDesignDraft, getDesignDraft, saveProduct } from "@/lib/store";
 import type { GarmentType, Product, Size, Stack } from "@/lib/types";
 import { LOGO_SLUGS } from "@/lib/logos";
 
@@ -60,13 +55,15 @@ const ProductForm = () => {
   const searchParams = useSearchParams();
   const collections = useCollections();
   const hydrated = useHydrated();
+  const products = useAdminProducts();
   const editId = searchParams.get("id");
   const fromEditor = searchParams.get("from") === "editor";
 
   const initial = useMemo(() => {
     if (!hydrated) return null;
     if (editId) {
-      const existing = getProduct(editId);
+      if (products.length === 0) return null; // catalog still loading
+      const existing = products.find((p) => p.id === editId);
       if (existing) return { form: existing, notice: "" };
       return { form: emptyForm(), notice: "Product not found — creating a new one instead." };
     }
@@ -85,7 +82,7 @@ const ProductForm = () => {
       }
     }
     return { form: emptyForm(), notice: "" };
-  }, [hydrated, editId, fromEditor]);
+  }, [hydrated, editId, fromEditor, products]);
 
   const [edits, setEdits] = useState<Partial<Product>>({});
   const [error, setError] = useState("");
@@ -122,8 +119,9 @@ const ProductForm = () => {
       });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     if (!form.name.trim()) {
       setError("Give the product a name.");
       return;
@@ -136,7 +134,12 @@ const ProductForm = () => {
       setError("Price must be greater than zero.");
       return;
     }
-    saveProduct({ ...form, name: form.name.trim(), tech: form.tech.trim() });
+    try {
+      await saveProduct({ ...form, name: form.name.trim(), tech: form.tech.trim() });
+    } catch (err) {
+      setError((err as { message?: string })?.message ?? "Could not save the product.");
+      return;
+    }
     if (fromEditor) clearDesignDraft();
     router.push("/admin/products");
   };

@@ -4,11 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import ProductVisual from "@/components/product-visual";
 import { GARMENT_LABELS, STACK_LABELS, formatPrice } from "@/lib/constants";
-import { useCollections, useProducts } from "@/lib/hooks";
+import { useAdminProducts, useCollections } from "@/lib/hooks";
 import { deleteProduct, saveProduct } from "@/lib/store";
 
 const AdminProductsPage = () => {
-  const products = useProducts();
+  const products = useAdminProducts();
   const collections = useCollections();
   const [query, setQuery] = useState("");
 
@@ -92,7 +92,7 @@ const AdminProductsPage = () => {
                 <td className="px-4 py-3">
                   <button
                     onClick={() =>
-                      saveProduct({
+                      void saveProduct({
                         ...p,
                         status: p.status === "active" ? "draft" : "active",
                       })
@@ -117,7 +117,7 @@ const AdminProductsPage = () => {
                     </Link>
                     <button
                       onClick={() => {
-                        if (confirm(`Delete "${p.name}"?`)) deleteProduct(p.id);
+                        if (confirm(`Delete "${p.name}"?`)) void deleteProduct(p.id);
                       }}
                       className="font-medium text-neutral-400 hover:text-red-600"
                     >
