@@ -21,5 +21,5 @@ ENV PORT=8000
 EXPOSE 8000
 
 # Configuration is provided via environment variables (see .env.local for the
-# full list): DATABASE_URL, JWT_SECRET, STRIPE_*, COINBASE_*, FRONTEND_URL, etc.
+# full list): DATABASE_URL, JWT_SECRET, STRIPE_*, FRONTEND_URL, etc.
 ENTRYPOINT ["/app/olmeware"]

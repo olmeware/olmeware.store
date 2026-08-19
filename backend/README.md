@@ -1,7 +1,7 @@
 # Olmeware Store — Backend
 
 Go API that powers the [Olmeware storefront](../CLAUDE.md): catalog, auth, cart, checkout,
-inventory and payments (Stripe cards + Coinbase Commerce crypto).
+inventory and Stripe card payments.
 
 The design rule of this service: **the backend composes, the frontend renders.** Prices
 arrive preformatted, logo paths come from the database, availability is resolved
@@ -12,7 +12,7 @@ server-side. The Next.js client does no business logic.
 | Language / runtime | Go 1.26 (stdlib `net/http`, method+path routing) |
 | Database | Postgres (Supabase project `kimdkwjbuwgwyocjsthu`) via `pgx/v5` pool |
 | Auth | HS256 JWT access tokens + opaque rotating refresh tokens |
-| Payments | `stripe-go/v79` (cards) · Coinbase Commerce REST (BTC/ETH/SOL) |
+| Payments | `stripe-go/v79` (cards) |
 | Port / prefix | `:8000`, every route under `/api/v1` |
 | Currency | MXN, integer minor units (centavos) |
 | Full endpoint reference | [`docs/v1.0.0/v1.0.0.md`](docs/v1.0.0/v1.0.0.md) |
@@ -36,6 +36,16 @@ curl -s localhost:8000/api/v1/health
 Point the frontend at it with `NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1`
 (that is already the default in `lib/api.ts`), then `pnpm dev` from the repo root.
 
+For a fully local Postgres-backed verification, Docker Desktop must be running:
+
+```bash
+./scripts/db-local.sh
+```
+
+The script starts Postgres 16, applies `database/scheme.sql` and the idempotent
+`database/exec.sql`, verifies `go run . -seed` and the health endpoint, then runs
+`go test ./...`. The named database volume remains available for later local runs.
+
 Everything is one binary:
 
 ```bash
@@ -57,15 +67,13 @@ git-ignored — never commit keys.
 | `DATABASE_URL` | **yes** | — | Postgres/Supabase URL. Startup fails fast without it. |
 | `JWT_SECRET` | prod | `dev-insecure-jwt-secret-change-me` | HS256 signing key. Rotating it invalidates every access token. |
 | `PORT` | no | `8000` | |
-| `FRONTEND_URL` | no | `http://localhost:3000` | CORS allow-list entry + crypto redirect/cancel URLs. Trailing slash trimmed. |
+| `FRONTEND_URL` | no | `http://localhost:3000` | CORS allow-list entry. Trailing slash trimmed. |
 | `ACCESS_TOKEN_TTL` | no | `15m` | Go duration string. |
 | `REFRESH_TOKEN_TTL` | no | `720h` (30d) | Go duration string. |
 | `STRIPE_TEST_SECRET_KEY` / `STRIPE_SECRET_KEY` | no | — | Test key wins when both are set. |
 | `STRIPE_TEST_PUBLISHABLE_KEY` / `STRIPE_PUBLISHABLE_KEY` | no | — | Returned to the browser by `/payments/config`. |
 | `STRIPE_TEST_WEBHOOK_SECRET` / `STRIPE_WEBHOOK_SECRET` | no | — | `whsec_…`; required to accept Stripe webhooks. |
 | `STRIPE_ALLOW_LIVE` | no | `false` | Safety latch — see below. |
-| `COINBASE_COMMERCE_KEY` | no | — | Absent ⇒ crypto endpoints return `503`. |
-| `COINBASE_COMMERCE_WEBHOOK_SECRET` | no | — | HMAC-SHA256 shared secret for `X-CC-Webhook-Signature`. |
 | `ADMIN_EMAIL` | no | `admin@olmeware.store` | Bootstrap admin identity used by `-seed`. |
 | `ADMIN_PASSWORD` | no | `admin123` | **Change before any public deploy.** |
 | `ADMIN_NAME` | no | `Olmeware Admin` | |
@@ -75,8 +83,8 @@ git-ignored — never commit keys.
 running:
 
 ```
-olmeware payments: stripe=test crypto=false
-olmeware payments: stripe=disabled (live key blocked; set STRIPE_ALLOW_LIVE=true to enable) crypto=true
+olmeware payments: stripe=test
+olmeware payments: stripe=disabled (live key blocked; set STRIPE_ALLOW_LIVE=true to enable)
 ```
 
 ---
@@ -91,7 +99,7 @@ backend/
 │   └── conn.go              pgxpool setup (10 max conns, ping on boot)
 ├── docs/v1.0.0/v1.0.0.md    the API contract (endpoint-by-endpoint)
 └── internal/
-    ├── config/              env loading, defaults, Stripe/Coinbase feature flags
+    ├── config/              env loading, defaults, Stripe feature flags
     ├── server/              route table + middleware chain + /health   (integration test)
     ├── middleware/          Recover → Logger → CORS
     ├── httpx/               JSON writer, error envelope, strict decoder, client IP
@@ -100,7 +108,7 @@ backend/
     ├── catalog/             public read model (products, collections, tech themes)
     ├── cart/                guest + user carts, stock-aware mutations
     ├── orders/              checkout transaction, order read models
-    ├── payments/            Stripe + Coinbase clients, idempotency, webhook inboxes
+    ├── payments/            Stripe client, idempotency, webhook inbox
     ├── admin/               admin CRUD, slugify, audit log
     └── seed/                idempotent bootstrap (admin, collections, catalog, inventory)
 ```
@@ -147,7 +155,7 @@ Full request/response documentation lives in
 | Cart | `GET /cart` · `POST /cart/items` · `PUT\|DELETE /cart/items/{variantId}` · `DELETE /cart` | optional auth (guest via `X-Guest-Token`) |
 | Orders | `POST /orders` (guest ok) · `GET /orders` · `GET /orders/{id}` | checkout optional-auth, reads require bearer |
 | Admin | `GET\|POST /admin/products` · `PUT\|DELETE /admin/products/{id}` · `PATCH /admin/products/{id}/status` · `GET\|POST /admin/collections` · `PUT\|DELETE /admin/collections/{id}` | admin bearer (`403` otherwise) |
-| Payments | `GET /payments/config` · `POST /payments/stripe/intent` · `POST /payments/crypto/charge` · `POST /payments/{stripe,crypto}/webhook` | optional auth; webhooks are signature-verified |
+| Payments | `GET /payments/config` · `POST /payments/stripe/intent` · `POST /payments/stripe/webhook` | optional auth; webhooks are signature-verified |
 
 ### Cross-cutting conventions
 
@@ -177,44 +185,39 @@ human-facing identity column.
 
 ## Data model
 
-The schema lives in Postgres (Supabase). Enums are real Postgres types, soft deletes are
+The schema lives in Postgres (Supabase). Product status is a Postgres enum, soft deletes use
 `deleted_at is null` partial-unique indexes, and money columns are `bigint` minor units.
 
 | Area | Tables |
 | --- | --- |
-| Identity | `users`, `user_sessions`, `addresses`, `customer_payment_profiles` |
-| Catalog | `collections`, `tech_themes`, `products`, `product_collections`, `product_variants`, `product_media`, `product_designs` |
+| Identity | `users`, `user_sessions` |
+| Catalog | `collections`, `tech_themes`, `products`, `product_collections`, `product_variants` |
 | Inventory | `inventory`, `inventory_movements` |
 | Commerce | `carts`, `cart_items`, `orders`, `order_items` |
-| Money | `payments`, `refunds`, `stripe_webhook_events`, `crypto_webhook_events` |
-| Ops | `fulfillments`, `fulfillment_items`, `admin_audit_log` |
+| Money | `payments`, `stripe_webhook_events` |
+| Ops | `admin_audit_log` |
 
-Enums: `user_role(customer, admin)` · `user_status(active, disabled)` ·
-`product_status(draft, active, archived)` · `garment_type(shirt, sweater, hoodie, cap)` ·
-`cart_status(active, converted, abandoned)` ·
-`order_status(pending_payment, paid, processing, shipped, delivered, cancelled, refunded, partially_refunded)` ·
-`payment_status(pending, requires_action, processing, succeeded, failed, cancelled, partially_refunded, refunded)` ·
-`inventory_movement_type(initial, adjustment, reservation, reservation_release, sale, return)`.
+`product_status(draft, active, archived)` is a Postgres enum. Other finite state fields use
+text `check` constraints matching the values accepted by the Go services.
 
 ### Invariants worth knowing
 
-- `users_email_unique` — `unique (lower(email)) where deleted_at is null`. Emails are
-  normalized to `lower(btrim(...))` in Go *and* CHECK-constrained in SQL.
+- `users_email_live_uidx` — `unique (lower(email)) where deleted_at is null`. Email
+  normalization (`trim` + lowercase) is performed by the Go application before storage.
 - `carts_one_active_user_idx` / `carts_active_guest_token_idx` — at most one **active**
   cart per user and per guest token.
 - `cart_items (cart_id, variant_id)` unique — a line is the variant; adds merge quantities.
-- `product_variants (product_id, size, color_hex)` unique alive; SKUs unique alive.
+- `product_variants (product_id, size, color_hex)` is unique for live variants. SKU is
+  indexed but intentionally not unique because a product color change retains old variants.
 - `payments (provider, idempotency_key)` unique — the once-only charge guarantee.
 - `payments (provider, provider_payment_intent_id)` unique where not null.
 - `orders.cart_id` unique — a cart converts into at most one order.
 - `inventory_movements` is **append-only**; `inventory.on_hand/reserved` is the materialized
   view of that ledger and must be updated in the same transaction as the movement row.
 
-> ⚠️ **Schema source of truth.** `database/scheme.sql`, `alter.sql` and `exec.sql` are
-> currently **empty placeholders** — the live schema exists only in the Supabase project and
-> its migration history. Dumping the schema into `database/scheme.sql` is the top item in
-> [Known gaps](#known-gaps--roadmap); until then, reproduce an environment by cloning the
-> Supabase project rather than by running these files.
+> **Schema source of truth.** `database/scheme.sql` contains the complete baseline schema,
+> indexes, RLS, and grants. `database/exec.sql` contains the idempotent bootstrap admin and
+> catalog seed. `database/alter.sql` is reserved for future incremental migrations.
 
 RLS is enabled deny-by-default on every table. The backend connects as the owner role and
 bypasses RLS — **authorization is enforced in Go**, not by the database.
@@ -292,8 +295,6 @@ Stock is therefore *reserved* at checkout and only *sold* when payment succeeds.
 ```
 POST /orders                    → order (pending_payment, stock reserved)
 POST /payments/stripe/intent    → { clientSecret, publishableKey, … }   ← Stripe Elements
-        or
-POST /payments/crypto/charge    → { hostedUrl, chargeCode, … }          ← Coinbase hosted page
                                         ↓
                             provider webhook (verified)
                                         ↓
@@ -307,7 +308,7 @@ browser does not, by itself, change order state.
 
 Three independent layers:
 
-1. **Stable key per order+provider**: `stripe_order_<orderID>` / `coinbase_order_<orderID>`.
+1. **Stable key per order+provider**: `stripe_order_<orderID>`.
 2. **Database**: `unique (provider, idempotency_key)` on `payments`, written with
    `on conflict do nothing`. Concurrent duplicate requests collapse onto one payment row.
 3. **Provider**: the same key is sent as Stripe's `Idempotency-Key`, so even a retry that
@@ -317,20 +318,18 @@ Repeat calls return the existing intent/charge with `"reused": true`. Before cre
 anything, the service re-checks order state: already-paid orders get `409`, orders belonging
 to another user get `403` (guest orders are reachable only via their unguessable UUID).
 
-**Webhook exactly-once.** Every event is inserted into `stripe_webhook_events` /
-`crypto_webhook_events` keyed by provider event id, `on conflict do nothing`. A duplicate
+**Webhook exactly-once.** Every event is inserted into `stripe_webhook_events` keyed by
+provider event id, `on conflict do nothing`. A duplicate
 delivery inserts zero rows and returns immediately. Applying a success is itself guarded:
 the payment update requires `status <> 'succeeded'` and the order update requires
 `status = 'pending_payment'`, both `returning id` — so a redelivery can never double-decrement
 inventory. Failures are recorded on the inbox row (`processing_attempts`, `last_error`) and
 leave the order payable.
 
-Signatures: Stripe via `webhook.ConstructEvent` on the **raw** body; Coinbase via
-constant-time HMAC-SHA256 of the raw body against `X-CC-Webhook-Signature`. Both webhook
-handlers read the body directly (never `httpx.Decode`) because signature verification needs
-the exact bytes. Handled events: `payment_intent.succeeded`,
-`payment_intent.payment_failed`, `charge:confirmed`, `charge:resolved`, `charge:failed`;
-everything else is acknowledged and ignored.
+Signatures: Stripe via `webhook.ConstructEvent` on the **raw** body. The webhook handler
+reads the body directly (never `httpx.Decode`) because signature verification needs
+the exact bytes. Handled events are `payment_intent.succeeded` and
+`payment_intent.payment_failed`; everything else is acknowledged and ignored.
 
 ### Local webhook testing
 
@@ -341,9 +340,7 @@ stripe trigger payment_intent.succeeded
 ```
 
 Without `stripe listen` running, a local end-to-end checkout will pay in the Stripe
-dashboard but the order stays `pending_payment` — that is expected, not a bug. Coinbase has
-no CLI forwarder; use a tunnel (`cloudflared`, `ngrok`) and register the public URL in the
-Coinbase Commerce dashboard.
+dashboard but the order stays `pending_payment` — that is expected, not a bug.
 
 ---
 
@@ -390,8 +387,7 @@ go vet ./...
 ```
 
 Unit coverage: MXN formatting, slugify/status normalization, JWT round-trip + wrong-secret +
-expiry, refresh-token hashing, bcrypt, Coinbase HMAC verification and payload parsing,
-`X-Forwarded-For` client-IP parsing.
+expiry, refresh-token hashing, bcrypt, and `X-Forwarded-For` client-IP parsing.
 
 `internal/server/integration_test.go` spins up the real handler with `httptest`, then drives
 register → catalog → add to cart → checkout → read orders against a live database, cleaning
@@ -431,7 +427,7 @@ docker run --rm -p 8000:8000 --env-file backend/.env.local olmeware-backend
 
 `Dockerfile` is a two-stage build: `golang:1.26-alpine` compiles a static
 (`CGO_ENABLED=0`, `-trimpath -ldflags="-s -w"`) binary, and `alpine:3.20` runs it as
-non-root uid 10001 with `ca-certificates` for outbound TLS to Stripe/Coinbase. No config
+non-root uid 10001 with `ca-certificates` for outbound TLS to Stripe. No config
 files are baked in — everything comes from the environment.
 
 Production checklist:
@@ -473,7 +469,7 @@ value is minor units with a formatted sibling; every error the client sees is an
 | `config: DATABASE_URL is required` | No `.env.local` in the working directory (it's loaded relative to CWD — run from `backend/`). |
 | `database: ping database: …` at boot | Bad URL, network blocked, or a paused Supabase project. |
 | `payments: stripe=disabled` in the boot log | No secret key, or a live key without `STRIPE_ALLOW_LIVE=true`. |
-| `503 payments_unavailable` | Same as above, or `COINBASE_COMMERCE_KEY` unset for crypto. |
+| `503 payments_unavailable` | Stripe is not configured or a live key is blocked. |
 | Order stuck in `pending_payment` after paying locally | No `stripe listen` forwarding to `:8000`, or the wrong `whsec_…`. |
 | `400 Invalid Stripe signature.` | Webhook secret mismatch, or a proxy that rewrote the raw body. |
 | Frontend requests blocked by CORS | `FRONTEND_URL` doesn't match the browser origin exactly (scheme + port). |
@@ -486,21 +482,18 @@ value is minor units with a formatted sibling; every error the client sees is an
 
 Deliberately tracked, in rough priority order:
 
-1. **`database/scheme.sql` is empty** — the schema exists only in Supabase. Dump it (plus
-   RLS policies and enums) so the database is reproducible from this repo.
-2. **No reservation expiry** — abandoned `pending_payment` orders hold stock forever. Needs
-   a sweeper that releases reservations (`reservation_release` movements) past a TTL, plus
+1. **No reservation expiry** — abandoned `pending_payment` orders hold stock forever. Needs
+   a sweeper that releases reservations (`release` movements) past a TTL, plus
    `carts.expires_at` cleanup for abandoned carts.
-3. **No rate limiting** on `/auth/login`, `/auth/register` or `/auth/refresh`.
-4. **Refunds and fulfillments have tables but no endpoints** (`refunds`, `fulfillments`,
-   `fulfillment_items`), and there is no admin order-management surface — admins cannot list
-   or advance orders through the API.
-5. **`product_media` is never read** — `Product.images` is always `[]`, so the storefront
-   always falls back to the live SVG mockup. Uploaded mockups need read + upload paths.
-6. **No guest→user cart merge** on login.
-7. **Login user-enumeration timing** — compare against a dummy bcrypt hash on the
+2. **No rate limiting** on `/auth/login`, `/auth/register` or `/auth/refresh`.
+3. **No refunds, fulfillments, or admin order-management surface** — admins cannot list or
+   advance orders through the API.
+4. **No persisted product media** — `Product.images` is always `[]`, so the storefront
+   falls back to the live SVG mockup. Uploaded mockups need schema, read, and upload paths.
+5. **No guest→user cart merge** on login.
+6. **Login user-enumeration timing** — compare against a dummy bcrypt hash on the
    missing-user path.
-8. **CORS hardcodes `localhost:3000`** in addition to `FRONTEND_URL`; make dev origins
+7. **CORS hardcodes `localhost:3000`** in addition to `FRONTEND_URL`; make dev origins
    conditional on environment.
-9. `product_designs`, `addresses` and `customer_payment_profiles` are modeled but unused —
-   the mockup design draft still lives in the browser's `localStorage`.
+8. **Design drafts and saved addresses are not persisted** — the mockup design draft still
+   lives in the browser's `localStorage`.

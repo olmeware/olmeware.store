@@ -186,24 +186,3 @@ func (r *Repo) markStripeError(ctx context.Context, id, msg string) {
 	_, _ = r.db.Exec(ctx, `update stripe_webhook_events
 		set processing_attempts = processing_attempts + 1, last_error = $2 where event_id = $1`, id, msg)
 }
-
-// insertCryptoEvent records a crypto event id; returns false if already seen.
-func (r *Repo) insertCryptoEvent(ctx context.Context, id, eventType, chargeCode string, payload []byte) (bool, error) {
-	tag, err := r.db.Exec(ctx, `
-		insert into crypto_webhook_events (event_id, provider, event_type, charge_code, payload)
-		values ($1, 'coinbase', $2, nullif($3,''), $4::jsonb)
-		on conflict (event_id) do nothing`, id, eventType, chargeCode, string(payload))
-	if err != nil {
-		return false, err
-	}
-	return tag.RowsAffected() == 1, nil
-}
-
-func (r *Repo) markCryptoProcessed(ctx context.Context, id string) {
-	_, _ = r.db.Exec(ctx, `update crypto_webhook_events set processed_at = now() where event_id = $1`, id)
-}
-
-func (r *Repo) markCryptoError(ctx context.Context, id, msg string) {
-	_, _ = r.db.Exec(ctx, `update crypto_webhook_events
-		set processing_attempts = processing_attempts + 1, last_error = $2 where event_id = $1`, id, msg)
-}

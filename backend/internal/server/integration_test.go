@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/olmeware/backend/database"
 	"github.com/olmeware/backend/internal/config"
+	orderrepo "github.com/olmeware/backend/internal/orders"
 	"github.com/olmeware/backend/internal/server"
 )
 
@@ -40,9 +43,10 @@ func TestStorefrontFlow(t *testing.T) {
 	defer ts.Close()
 
 	email := fmt.Sprintf("itest+%d@example.com", time.Now().UnixNano())
-	var userID, orderID string
+	var userID string
+	var orderIDs []string
 	defer func() {
-		if orderID != "" {
+		for _, orderID := range orderIDs {
 			_, _ = pool.Exec(ctx, `update inventory i set reserved = reserved - oi.quantity
 				from order_items oi where oi.order_id = $1 and oi.variant_id = i.variant_id`, orderID)
 			_, _ = pool.Exec(ctx, `delete from inventory_movements where reference_type='order' and reference_id=$1`, orderID)
@@ -135,7 +139,8 @@ func TestStorefrontFlow(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("checkout status = %d (%v)", code, order)
 	}
-	orderID, _ = order["id"].(string)
+	orderID, _ := order["id"].(string)
+	orderIDs = append(orderIDs, orderID)
 	if order["status"] != "pending_payment" {
 		t.Fatalf("order status = %v", order["status"])
 	}
@@ -153,5 +158,75 @@ func TestStorefrontFlow(t *testing.T) {
 	_, cart2 := call("GET", "/api/v1/cart", token, nil)
 	if int(cart2["itemCount"].(float64)) != 0 {
 		t.Fatalf("cart should be empty after checkout, got %v", cart2["itemCount"])
+	}
+
+	// Create a second cart and race two repository checkouts against it. Both
+	// callers must resolve to the same order and reserve inventory only once.
+	code, _ = call("POST", "/api/v1/cart/items", token, map[string]any{
+		"variantId": variantID, "quantity": 1,
+	})
+	if code != http.StatusOK {
+		t.Fatalf("add to second cart status = %d", code)
+	}
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		t.Fatalf("parse user id: %v", err)
+	}
+	var cartID uuid.UUID
+	if err := pool.QueryRow(ctx,
+		`select id from carts where user_id=$1 and status='active'`, uid).Scan(&cartID); err != nil {
+		t.Fatalf("load second cart: %v", err)
+	}
+
+	repo := orderrepo.NewRepo(pool)
+	request := orderrepo.CreateOrderRequest{
+		Email: email,
+		Name:  "Integration Tester",
+		ShippingAddress: orderrepo.Address{
+			RecipientName: "Integration Tester", Line1: "1 Test St", City: "CDMX",
+			State: "CDMX", PostalCode: "01000", CountryCode: "MX",
+		},
+	}
+	type checkoutResult struct {
+		order *orderrepo.Order
+		err   error
+	}
+	results := make([]checkoutResult, 2)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			results[i].order, results[i].err = repo.CreateFromCart(ctx, cartID, &uid, request)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	for i, result := range results {
+		if result.err != nil {
+			t.Fatalf("concurrent checkout %d: %v", i, result.err)
+		}
+	}
+	if results[0].order.ID != results[1].order.ID {
+		t.Fatalf("concurrent checkouts created different orders: %s != %s",
+			results[0].order.ID, results[1].order.ID)
+	}
+	concurrentOrderID := results[0].order.ID
+	orderIDs = append(orderIDs, concurrentOrderID.String())
+
+	var orderCount, reservationCount int
+	if err := pool.QueryRow(ctx, `select count(*) from orders where cart_id=$1`, cartID).Scan(&orderCount); err != nil {
+		t.Fatalf("count concurrent orders: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `select count(*) from inventory_movements
+		where reference_type='order' and reference_id=$1 and movement_type='reservation'`,
+		concurrentOrderID).Scan(&reservationCount); err != nil {
+		t.Fatalf("count concurrent reservations: %v", err)
+	}
+	if orderCount != 1 || reservationCount != 1 {
+		t.Fatalf("concurrent checkout produced %d orders and %d reservations; want 1 and 1",
+			orderCount, reservationCount)
 	}
 }

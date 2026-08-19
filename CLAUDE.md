@@ -172,8 +172,8 @@ pnpm lint     # ESLint
   `lib/store.ts`: catalog, JWT auth, admin writes (all statuses via `/admin/products`),
   and real checkout — create order (reserves inventory) → **Stripe Elements card capture**
   (`components/stripe-payment.tsx`, test mode) — all go through the API. The cart and mockup
-  design-draft remain in `localStorage`. Backend also exposes crypto (Coinbase) + webhook
-  endpoints. Note: order status flips to `paid` via the Stripe webhook, so local end-to-end
+  design-draft remain in `localStorage`. Stripe is the only payment provider. Note: order
+  status flips to `paid` via the Stripe webhook, so local end-to-end
   "paid" state needs `stripe listen` forwarding to `:8000`.
 - Supabase is available via MCP tools for the database/auth layer when the backend is built.
 - Dev gotcha: a stale `pnpm dev` on port 3000 serves stale CSS — kill it

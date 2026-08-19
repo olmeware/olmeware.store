@@ -43,7 +43,7 @@ func New(cfg *config.Config, db *pgxpool.Pool) *Server {
 	} else if cfg.StripeSecretKey != "" && !cfg.StripeIsTest() {
 		stripeMode = "disabled (live key blocked; set STRIPE_ALLOW_LIVE=true to enable)"
 	}
-	log.Printf("payments: stripe=%s crypto=%v", stripeMode, cfg.CoinbaseEnabled())
+	log.Printf("payments: stripe=%s", stripeMode)
 
 	return &Server{cfg: cfg, db: db, auth: authSvc}
 }
@@ -66,15 +66,11 @@ func (s *Server) Handler() http.Handler {
 	orders.NewHandler(orders.NewService(orders.NewRepo(s.db)), s.auth.Tokens()).Register(mux, APIPrefix)
 	admin.NewHandler(admin.NewService(admin.NewRepo(s.db)), s.auth.Tokens()).Register(mux, APIPrefix)
 	payments.NewHandler(payments.NewService(payments.Deps{
-		Repo:            payments.NewRepo(s.db),
-		StripeSecret:    s.cfg.StripeSecretKey,
-		StripePublish:   s.cfg.StripePublishableKey,
-		StripeWebhook:   s.cfg.StripeWebhookSecret,
-		CoinbaseKey:     s.cfg.CoinbaseCommerceKey,
-		CoinbaseWebhook: s.cfg.CoinbaseCommerceWebhookSecret,
-		FrontendURL:     s.cfg.FrontendURL,
-		StripeEnabled:   s.cfg.StripeEnabled(),
-		CoinbaseEnabled: s.cfg.CoinbaseEnabled(),
+		Repo:          payments.NewRepo(s.db),
+		StripeSecret:  s.cfg.StripeSecretKey,
+		StripePublish: s.cfg.StripePublishableKey,
+		StripeWebhook: s.cfg.StripeWebhookSecret,
+		StripeEnabled: s.cfg.StripeEnabled(),
 	}), s.auth.Tokens()).Register(mux, APIPrefix)
 
 	return middleware.Chain(mux,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 
 	"github.com/google/uuid"
@@ -19,39 +18,29 @@ type Viewer struct {
 	IsAdmin bool
 }
 
-// Service orchestrates card (Stripe) and crypto (Coinbase Commerce) payments.
+// Service orchestrates Stripe card payments.
 type Service struct {
 	repo           *Repo
 	stripe         *stripeClient
-	coinbase       *coinbaseClient
 	publishableKey string
-	frontendURL    string
 	stripeOn       bool
-	coinbaseOn     bool
 }
 
 // Deps configures the payment service.
 type Deps struct {
-	Repo            *Repo
-	StripeSecret    string
-	StripePublish   string
-	StripeWebhook   string
-	CoinbaseKey     string
-	CoinbaseWebhook string
-	FrontendURL     string
-	StripeEnabled   bool
-	CoinbaseEnabled bool
+	Repo          *Repo
+	StripeSecret  string
+	StripePublish string
+	StripeWebhook string
+	StripeEnabled bool
 }
 
 func NewService(d Deps) *Service {
 	return &Service{
 		repo:           d.Repo,
 		stripe:         newStripeClient(d.StripeSecret, d.StripeWebhook),
-		coinbase:       newCoinbaseClient(d.CoinbaseKey, d.CoinbaseWebhook),
 		publishableKey: d.StripePublish,
-		frontendURL:    d.FrontendURL,
 		stripeOn:       d.StripeEnabled,
-		coinbaseOn:     d.CoinbaseEnabled,
 	}
 }
 
@@ -153,83 +142,6 @@ func (s *Service) applyStripeEvent(ctx context.Context, event stripe.Event) erro
 	}
 }
 
-// CreateCryptoCharge creates (or returns) an idempotent Coinbase Commerce charge.
-func (s *Service) CreateCryptoCharge(ctx context.Context, orderID uuid.UUID, v Viewer) (*CryptoChargeResponse, error) {
-	if !s.coinbaseOn {
-		return nil, errUnavailable
-	}
-	order, err := s.loadPayable(ctx, orderID, v)
-	if err != nil {
-		return nil, err
-	}
-
-	idem := "coinbase_order_" + orderID.String()
-	if pid, code, _, e := s.repo.findPayment(ctx, "coinbase", idem); e == nil && code != "" {
-		return &CryptoChargeResponse{
-			PaymentID: pid, ChargeCode: code, HostedURL: hostedURL(code),
-			Amount: order.TotalMinor, Currency: order.Currency, Status: "pending",
-			Reused: true, Coins: SupportedCoins,
-		}, nil
-	}
-
-	amount := fmt.Sprintf("%d.%02d", order.TotalMinor/100, order.TotalMinor%100)
-	desc := fmt.Sprintf("Olmeware order #%d", order.OrderNumber)
-	charge, err := s.coinbase.createCharge(ctx, "Olmeware Store", desc, amount, order.Currency,
-		orderID.String(), s.frontendURL+"/orders", s.frontendURL+"/cart")
-	if err != nil {
-		return nil, err
-	}
-	paymentID, created, err := s.repo.insertOrGetPayment(ctx, orderID, "coinbase",
-		order.TotalMinor, order.Currency, idem, charge.Code)
-	if err != nil {
-		return nil, err
-	}
-	hosted := charge.HostedURL
-	if hosted == "" {
-		hosted = hostedURL(charge.Code)
-	}
-	return &CryptoChargeResponse{
-		PaymentID: paymentID, ChargeCode: charge.Code, HostedURL: hosted,
-		Amount: order.TotalMinor, Currency: order.Currency, Status: charge.Status,
-		Reused: !created, Coins: SupportedCoins,
-	}, nil
-}
-
-// HandleCryptoWebhook verifies and processes a Coinbase event exactly once.
-func (s *Service) HandleCryptoWebhook(ctx context.Context, payload []byte, sig string) error {
-	if !s.coinbase.verifyWebhook(payload, sig) {
-		return httpx.BadRequest("Invalid Coinbase signature.")
-	}
-	event, err := parseCoinbaseEvent(payload)
-	if err != nil {
-		return httpx.BadRequest("Malformed Coinbase payload.")
-	}
-	code := event.Event.Data.Code
-	isNew, err := s.repo.insertCryptoEvent(ctx, event.Event.ID, event.Event.Type, code, payload)
-	if err != nil {
-		return err
-	}
-	if !isNew {
-		return nil
-	}
-
-	var perr error
-	switch event.Event.Type {
-	case "charge:confirmed", "charge:resolved":
-		log.Printf("payment: coinbase charge %s confirmed", code)
-		perr = s.repo.markSucceededByIntent(ctx, "coinbase", code, "")
-	case "charge:failed":
-		log.Printf("payment: coinbase charge %s failed", code)
-		perr = s.repo.markFailedByIntent(ctx, "coinbase", code, event.Event.Type, "")
-	}
-	if perr != nil {
-		s.repo.markCryptoError(ctx, event.Event.ID, perr.Error())
-		return perr
-	}
-	s.repo.markCryptoProcessed(ctx, event.Event.ID)
-	return nil
-}
-
 // loadPayable loads an order and checks it is payable by the viewer.
 func (s *Service) loadPayable(ctx context.Context, orderID uuid.UUID, v Viewer) (*orderForPayment, error) {
 	order, err := s.repo.getOrder(ctx, orderID)
@@ -253,5 +165,3 @@ func (s *Service) loadPayable(ctx context.Context, orderID uuid.UUID, v Viewer) 
 		return nil, httpx.Conflict("This order cannot be paid.")
 	}
 }
-
-func hostedURL(code string) string { return "https://commerce.coinbase.com/charges/" + code }

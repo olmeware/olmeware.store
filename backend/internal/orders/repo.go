@@ -105,10 +105,22 @@ func (r *Repo) CreateFromCart(ctx context.Context, cartID uuid.UUID, userID *uui
 			tax_minor, total_minor, shipping_address, billing_address, customer_note, placed_at)
 		values ($1, $2, 'pending_payment', lower(btrim($3)), $4, nullif($5,''), 'MXN',
 			$6, 0, 0, 0, $6, $7::jsonb, $8::jsonb, nullif($9,''), now())
+		on conflict (cart_id) where cart_id is not null do nothing
 		returning id, order_number, created_at`
-	if err := tx.QueryRow(ctx, orderQ, userID, cartID, req.Email, req.Name, req.Phone,
+	err = tx.QueryRow(ctx, orderQ, userID, cartID, req.Email, req.Name, req.Phone,
 		subtotal, string(shippingJSON), nullableJSON(billingJSON), req.Note).
-		Scan(&order.ID, &order.OrderNumber, &order.CreatedAt); err != nil {
+		Scan(&order.ID, &order.OrderNumber, &order.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var existingID uuid.UUID
+		if err := tx.QueryRow(ctx, `select id from orders where cart_id = $1`, cartID).Scan(&existingID); err != nil {
+			return nil, err
+		}
+		if err := tx.Rollback(ctx); err != nil {
+			return nil, err
+		}
+		return r.GetByID(ctx, existingID, nil)
+	}
+	if err != nil {
 		return nil, err
 	}
 
