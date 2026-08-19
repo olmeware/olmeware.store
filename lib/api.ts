@@ -244,7 +244,6 @@ export const api = {
   // Payments
   paymentConfig(): Promise<{
     stripe: { enabled: boolean; publishableKey: string };
-    crypto: { enabled: boolean; coins: string[] };
     currency: string;
   }> {
     return raw("/payments/config");
@@ -255,13 +254,6 @@ export const api = {
       { method: "POST", body: { orderId }, auth: true, guest: true },
     );
   },
-  createCryptoCharge(orderId: string) {
-    return raw<{ hostedUrl: string; chargeCode: string; coins: string[] }>(
-      "/payments/crypto/charge",
-      { method: "POST", body: { orderId }, auth: true, guest: true },
-    );
-  },
-
   // Admin
   listAdminProducts(): Promise<{ products: BackendProduct[] }> {
     return raw("/admin/products", { auth: true });

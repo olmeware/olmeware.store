@@ -26,10 +26,6 @@ type Config struct {
 	StripeWebhookSecret  string
 	AllowLiveStripe      bool
 
-	// Coinbase Commerce (crypto: BTC / ETH / SOL).
-	CoinbaseCommerceKey           string
-	CoinbaseCommerceWebhookSecret string
-
 	// Bootstrap admin (the single store administrator).
 	AdminEmail    string
 	AdminPassword string
@@ -58,9 +54,6 @@ func Load() (*Config, error) {
 		StripeWebhookSecret:  firstenv("STRIPE_TEST_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET"),
 		AllowLiveStripe:      os.Getenv("STRIPE_ALLOW_LIVE") == "true",
 
-		CoinbaseCommerceKey:           os.Getenv("COINBASE_COMMERCE_KEY"),
-		CoinbaseCommerceWebhookSecret: os.Getenv("COINBASE_COMMERCE_WEBHOOK_SECRET"),
-
 		AdminEmail:    getenv("ADMIN_EMAIL", "admin@olmeware.store"),
 		AdminPassword: getenv("ADMIN_PASSWORD", "admin123"),
 		AdminName:     getenv("ADMIN_NAME", "Olmeware Admin"),
@@ -87,9 +80,6 @@ func (c *Config) StripeEnabled() bool {
 	}
 	return c.StripeIsTest() || c.AllowLiveStripe
 }
-
-// CoinbaseEnabled reports whether crypto charges can be created.
-func (c *Config) CoinbaseEnabled() bool { return c.CoinbaseCommerceKey != "" }
 
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
